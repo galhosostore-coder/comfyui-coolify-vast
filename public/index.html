@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComfyUI GPU Controller</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎨 ComfyUI GPU Controller</h1>
+            <p>Controle on-demand de GPU via Vast.ai</p>
+        </header>
+
+        <div class="status-card">
+            <div class="status-indicator" id="statusIndicator">
+                <span class="status-dot offline"></span>
+                <span id="statusText">Offline</span>
+            </div>
+            
+            <div class="status-details">
+                <div class="detail-item">
+                    <span class="label">IP:</span>
+                    <span id="ipAddress">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Última verificação:</span>
+                    <span id="lastCheck">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" class="btn btn-start" onclick="startGPU()">
+                ⚡ Iniciar GPU
+            </button>
+            <button id="stopBtn" class="btn btn-stop" onclick="stopGPU()" disabled>
+                🛑 Desligar GPU
+            </button>
+            <button id="openComfyBtn" class="btn btn-primary" onclick="openComfyUI()" disabled>
+                🚀 Abrir ComfyUI
+            </button>
+        </div>
+
+        <div class="logs" id="logs">
+            <h3>📋 Logs</h3>
+            <div class="log-content" id="logContent">
+                Aguardando ação...
+            </div>
+        </div>
+
+        <footer>
+            <p>💰 Lembre-se: GPU cobra por hora! Desligue após usar.</p>
+        </footer>
+    </div>
+
+    <script>
+        let statusInterval;
+
+        function updateStatus() {
+            fetch('/api/status')
+                .then(r => r.json())
+                .then(data => {
+                    const indicator = document.getElementById('statusIndicator');
+                    const statusText = document.getElementById('statusText');
+                    const ipAddress = document.getElementById('ipAddress');
+                    const lastCheck = document.getElementById('lastCheck');
+                    const startBtn = document.getElementById('startBtn');
+                    const stopBtn = document.getElementById('stopBtn');
+                    const openComfyBtn = document.getElementById('openComfyBtn');
+
+                    statusText.textContent = data.status.toUpperCase();
+                    ipAddress.textContent = data.ip || '-';
+                    lastCheck.textContent = data.lastCheck ? new Date(data.lastCheck).toLocaleTimeString('pt-BR') : '-';
+
+                    indicator.querySelector('.status-dot').className = 'status-dot';
+
+                    if (data.status === 'running') {
+                        indicator.querySelector('.status-dot').classList.add('online');
+                        startBtn.disabled = true;
+                        stopBtn.disabled = false;
+                        openComfyBtn.disabled = false;
+                    } else if (data.status === 'starting') {
+                        indicator.querySelector('.status-dot').classList.add('starting');
+                        startBtn.disabled = true;
+                        stopBtn.disabled = false;
+                        openComfyBtn.disabled = true;
+                    } else {
+                        indicator.querySelector('.status-dot').classList.add('offline');
+                        startBtn.disabled = false;
+                        stopBtn.disabled = true;
+                        openComfyBtn.disabled = true;
+                    }
+                });
+        }
+
+        function startGPU() {
+            addLog('⏳ Iniciando GPU na Vast.ai...');
+            document.getElementById('startBtn').disabled = true;
+            
+            fetch('/api/start', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        addLog(`❌ Erro: ${data.error}`);
+                        document.getElementById('startBtn').disabled = false;
+                    } else {
+                        addLog(`✅ ${data.message}`);
+                        clearInterval(statusInterval);
+                        statusInterval = setInterval(updateStatus, 5000);
+                    }
+                })
+                .catch(err => {
+                    addLog(`❌ Falha: ${err.message}`);
+                    document.getElementById('startBtn').disabled = false;
+                });
+        }
+
+        function stopGPU() {
+            if (!confirm('Deseja realmente desligar a GPU?')) return;
+            
+            addLog('🛑 Desligando GPU...');
+            
+            fetch('/api/stop', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    addLog(`✅ ${data.message}`);
+                    updateStatus();
+                })
+                .catch(err => {
+                    addLog(`❌ Erro: ${err.message}`);
+                });
+        }
+
+        function openComfyUI() {
+            window.open('/comfyui', '_blank');
+            addLog('🚀 Abrindo ComfyUI em nova aba...');
+        }
+
+        function addLog(message) {
+            const logContent = document.getElementById('logContent');
+            const timestamp = new Date().toLocaleTimeString('pt-BR');
+            logContent.innerHTML = `[${timestamp}] ${message}<br>` + logContent.innerHTML;
+        }
+
+        // Atualizar status a cada 15 segundos
+        statusInterval = setInterval(updateStatus, 15000);
+        updateStatus();
+    </script>
+</body>
+</html>
